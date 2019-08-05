@@ -28,7 +28,13 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
     # main loop
     tic = time.time()
     for i in range(args.epoch_iters):
-        batch_data = next(iterator)
+        if len(args.gpus) == 1:
+            batch_data_temp = next(iterator)
+            batch_data = batch_data_temp[0]
+            batch_data['img_data'] = batch_data['img_data'].cuda()
+            batch_data['seg_label'] = batch_data['seg_label'].cuda()
+        else:
+            batch_data = next(iterator)
         data_time.update(time.time() - tic)
 
         segmentation_module.zero_grad()
@@ -49,7 +55,7 @@ def train(segmentation_module, iterator, optimizers, history, epoch, args):
 
         # update average loss and acc
         ave_total_loss.update(loss.data.item())
-        ave_acc.update(acc.data.item()*100)
+        ave_acc.update(acc.data.item() * 100)
 
         # calculate accuracy, and display
         if i % args.disp_iter == 0:
@@ -146,14 +152,18 @@ def main(args):
     net_encoder = builder.build_encoder(
         arch=args.arch_encoder,
         fc_dim=args.fc_dim,
-        weights=args.weights_encoder)
+        weights=args.weights_encoder,
+        fine_tuned=args.fine_tuned)
     net_decoder = builder.build_decoder(
         arch=args.arch_decoder,
         fc_dim=args.fc_dim,
         num_class=args.num_class,
-        weights=args.weights_decoder)
+        weights=args.weights_decoder,
+        fine_tuned=args.fine_tuned)
 
-    crit = nn.NLLLoss(ignore_index=-1)
+    loss_scale = args.loss_weight
+    loss_weights = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0 * loss_scale])
+    crit = nn.NLLLoss(ignore_index=-1, weight=loss_weights)
 
     if args.arch_decoder.endswith('deepsup'):
         segmentation_module = SegmentationModule(
@@ -280,6 +290,10 @@ if __name__ == '__main__':
                         help='folder to output checkpoints')
     parser.add_argument('--disp_iter', type=int, default=20,
                         help='frequency to display')
+    parser.add_argument('--loss_weight', type=float, default=1.0,
+                        help='We added this')
+    parser.add_argument('--fine_tuned', default=False, type=bool,
+                        help='Whether to fine tune the last FC layer')
 
     args = parser.parse_args()
     print("Input arguments:")

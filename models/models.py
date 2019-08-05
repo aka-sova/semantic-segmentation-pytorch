@@ -4,6 +4,8 @@ import torchvision
 from . import resnet, resnext, mobilenet
 from lib.nn import SynchronizedBatchNorm2d
 
+PRETRAINED_NUM_CLASSES = 150
+
 
 class SegmentationModuleBase(nn.Module):
     def __init__(self):
@@ -29,7 +31,7 @@ class SegmentationModule(SegmentationModuleBase):
     def forward(self, feed_dict, *, segSize=None):
         # training
         if segSize is None:
-            if self.deep_sup_scale is not None: # use deep supervision technique
+            if self.deep_sup_scale is not None:  # use deep supervision technique
                 (pred, pred_deepsup) = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
             else:
                 pred = self.decoder(self.encoder(feed_dict['img_data'], return_feature_maps=True))
@@ -55,10 +57,10 @@ def conv3x3(in_planes, out_planes, stride=1, has_bias=False):
 
 def conv3x3_bn_relu(in_planes, out_planes, stride=1):
     return nn.Sequential(
-            conv3x3(in_planes, out_planes, stride),
-            SynchronizedBatchNorm2d(out_planes),
-            nn.ReLU(inplace=True),
-            )
+        conv3x3(in_planes, out_planes, stride),
+        SynchronizedBatchNorm2d(out_planes),
+        nn.ReLU(inplace=True),
+    )
 
 
 class ModelBuilder():
@@ -70,10 +72,10 @@ class ModelBuilder():
         elif classname.find('BatchNorm') != -1:
             m.weight.data.fill_(1.)
             m.bias.data.fill_(1e-4)
-        #elif classname.find('Linear') != -1:
+        # elif classname.find('Linear') != -1:
         #    m.weight.data.normal_(0.0, 0.0001)
 
-    def build_encoder(self, arch='resnet50dilated', fc_dim=512, weights=''):
+    def build_encoder(self, arch='resnet50dilated', fc_dim=512, weights='', fine_tuned=False):
         pretrained = True if len(weights) == 0 else False
         arch = arch.lower()
         if arch == 'mobilenetv2dilated':
@@ -107,7 +109,7 @@ class ModelBuilder():
             net_encoder = ResnetDilated(orig_resnet, dilate_scale=8)
         elif arch == 'resnext101':
             orig_resnext = resnext.__dict__['resnext101'](pretrained=pretrained)
-            net_encoder = Resnet(orig_resnext) # we can still use class Resnet
+            net_encoder = Resnet(orig_resnext)  # we can still use class Resnet
         else:
             raise Exception('Architecture undefined!')
 
@@ -116,41 +118,48 @@ class ModelBuilder():
             print('Loading weights for net_encoder')
             net_encoder.load_state_dict(
                 torch.load(weights, map_location=lambda storage, loc: storage), strict=False)
+            if fine_tuned:
+                for param in net_encoder.parameters():
+                    param.requires_grad = False
         return net_encoder
 
     def build_decoder(self, arch='ppm_deepsup',
-                      fc_dim=512, num_class=150,
-                      weights='', use_softmax=False):
+                      fc_dim=512, num_class=PRETRAINED_NUM_CLASSES,
+                      weights='', use_softmax=False, fine_tuned=False):
         arch = arch.lower()
         if arch == 'c1_deepsup':
-            net_decoder = C1DeepSup(
-                num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+            raise Exception(arch + " not supported in this version")
+            # net_decoder = C1DeepSup(
+            #     num_class=num_class,
+            #     fc_dim=fc_dim,
+            #     use_softmax=use_softmax)
         elif arch == 'c1':
-            net_decoder = C1(
-                num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+            raise Exception(arch + " not supported in this version")
+            # net_decoder = C1(
+            #     num_class=num_class,
+            #     fc_dim=fc_dim,
+            #     use_softmax=use_softmax)
         elif arch == 'ppm':
-            net_decoder = PPM(
-                num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax)
+            raise Exception(arch + " not supported in this version")
+            # net_decoder = PPM(
+            #     num_class=num_class,
+            #     fc_dim=fc_dim,
+            #     use_softmax=use_softmax)
         elif arch == 'ppm_deepsup':
             net_decoder = PPMDeepsup(
-                num_class=num_class,
+                num_class=(PRETRAINED_NUM_CLASSES if fine_tuned else num_class),
                 fc_dim=fc_dim,
                 use_softmax=use_softmax)
         elif arch == 'upernet_lite':
-            net_decoder = UPerNet(
-                num_class=num_class,
-                fc_dim=fc_dim,
-                use_softmax=use_softmax,
-                fpn_dim=256)
+            raise Exception(arch + " not supported in this version")
+            # net_decoder = UPerNet(
+            #     num_class=num_class,
+            #     fc_dim=fc_dim,
+            #     use_softmax=use_softmax,
+            #     fpn_dim=256)
         elif arch == 'upernet':
             net_decoder = UPerNet(
-                num_class=num_class,
+                num_class=(PRETRAINED_NUM_CLASSES if fine_tuned else num_class),
                 fc_dim=fc_dim,
                 use_softmax=use_softmax,
                 fpn_dim=512)
@@ -162,6 +171,26 @@ class ModelBuilder():
             print('Loading weights for net_decoder')
             net_decoder.load_state_dict(
                 torch.load(weights, map_location=lambda storage, loc: storage), strict=False)
+            if fine_tuned and arch == 'ppm_deepsup':
+                for param in net_decoder.parameters():
+                    param.requires_grad = False
+                net_decoder.conv_last = nn.Sequential(
+                    nn.Conv2d(fc_dim + len((1, 2, 3, 6)) * 512, 512,
+                              kernel_size=3, padding=1, bias=False),
+                    SynchronizedBatchNorm2d(512),
+                    nn.ReLU(inplace=True),
+                    nn.Dropout2d(0.1),
+                    nn.Conv2d(512, num_class, kernel_size=1)
+                )
+                net_decoder.conv_last_deepsup = nn.Conv2d(fc_dim // 4, num_class, 1, 1, 0)
+            if fine_tuned and arch == 'upernet':
+                for param in net_decoder.parameters():
+                    param.requires_grad = False
+                net_decoder.conv_last = nn.Sequential(
+                    conv3x3_bn_relu(len((256, 512, 1024, 2048)) * 512, 512, 1),
+                    nn.Conv2d(512, num_class, kernel_size=1)
+                )
+
         return net_decoder
 
 
@@ -193,10 +222,14 @@ class Resnet(nn.Module):
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.maxpool(x)
 
-        x = self.layer1(x); conv_out.append(x);
-        x = self.layer2(x); conv_out.append(x);
-        x = self.layer3(x); conv_out.append(x);
-        x = self.layer4(x); conv_out.append(x);
+        x = self.layer1(x);
+        conv_out.append(x);
+        x = self.layer2(x);
+        conv_out.append(x);
+        x = self.layer3(x);
+        conv_out.append(x);
+        x = self.layer4(x);
+        conv_out.append(x);
 
         if return_feature_maps:
             return conv_out
@@ -240,8 +273,8 @@ class ResnetDilated(nn.Module):
             if m.stride == (2, 2):
                 m.stride = (1, 1)
                 if m.kernel_size == (3, 3):
-                    m.dilation = (dilate//2, dilate//2)
-                    m.padding = (dilate//2, dilate//2)
+                    m.dilation = (dilate // 2, dilate // 2)
+                    m.padding = (dilate // 2, dilate // 2)
             # other convoluions
             else:
                 if m.kernel_size == (3, 3):
@@ -256,10 +289,14 @@ class ResnetDilated(nn.Module):
         x = self.relu3(self.bn3(self.conv3(x)))
         x = self.maxpool(x)
 
-        x = self.layer1(x); conv_out.append(x);
-        x = self.layer2(x); conv_out.append(x);
-        x = self.layer3(x); conv_out.append(x);
-        x = self.layer4(x); conv_out.append(x);
+        x = self.layer1(x);
+        conv_out.append(x);
+        x = self.layer2(x);
+        conv_out.append(x);
+        x = self.layer3(x);
+        conv_out.append(x);
+        x = self.layer4(x);
+        conv_out.append(x);
 
         if return_feature_maps:
             return conv_out
@@ -299,8 +336,8 @@ class MobileNetV2Dilated(nn.Module):
             if m.stride == (2, 2):
                 m.stride = (1, 1)
                 if m.kernel_size == (3, 3):
-                    m.dilation = (dilate//2, dilate//2)
-                    m.padding = (dilate//2, dilate//2)
+                    m.dilation = (dilate // 2, dilate // 2)
+                    m.padding = (dilate // 2, dilate // 2)
             # other convoluions
             else:
                 if m.kernel_size == (3, 3):
@@ -373,7 +410,7 @@ class C1(nn.Module):
         x = self.cbr(conv5)
         x = self.conv_last(x)
 
-        if self.use_softmax: # is True during inference
+        if self.use_softmax:  # is True during inference
             x = nn.functional.interpolate(
                 x, size=segSize, mode='bilinear', align_corners=False)
             x = nn.functional.softmax(x, dim=1)
@@ -401,7 +438,7 @@ class PPM(nn.Module):
         self.ppm = nn.ModuleList(self.ppm)
 
         self.conv_last = nn.Sequential(
-            nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
+            nn.Conv2d(fc_dim + len(pool_scales) * 512, 512,
                       kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
             nn.ReLU(inplace=True),
@@ -451,7 +488,7 @@ class PPMDeepsup(nn.Module):
         self.cbr_deepsup = conv3x3_bn_relu(fc_dim // 2, fc_dim // 4, 1)
 
         self.conv_last = nn.Sequential(
-            nn.Conv2d(fc_dim+len(pool_scales)*512, 512,
+            nn.Conv2d(fc_dim + len(pool_scales) * 512, 512,
                       kernel_size=3, padding=1, bias=False),
             SynchronizedBatchNorm2d(512),
             nn.ReLU(inplace=True),
@@ -514,11 +551,11 @@ class UPerNet(nn.Module):
             ))
         self.ppm_pooling = nn.ModuleList(self.ppm_pooling)
         self.ppm_conv = nn.ModuleList(self.ppm_conv)
-        self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales)*512, fpn_dim, 1)
+        self.ppm_last_conv = conv3x3_bn_relu(fc_dim + len(pool_scales) * 512, fpn_dim, 1)
 
         # FPN Module
         self.fpn_in = []
-        for fpn_inplane in fpn_inplanes[:-1]: # skip the top layer
+        for fpn_inplane in fpn_inplanes[:-1]:  # skip the top layer
             self.fpn_in.append(nn.Sequential(
                 nn.Conv2d(fpn_inplane, fpn_dim, kernel_size=1, bias=False),
                 SynchronizedBatchNorm2d(fpn_dim),
@@ -527,7 +564,7 @@ class UPerNet(nn.Module):
         self.fpn_in = nn.ModuleList(self.fpn_in)
 
         self.fpn_out = []
-        for i in range(len(fpn_inplanes) - 1): # skip the top layer
+        for i in range(len(fpn_inplanes) - 1):  # skip the top layer
             self.fpn_out.append(nn.Sequential(
                 conv3x3_bn_relu(fpn_dim, fpn_dim, 1),
             ))
@@ -554,15 +591,15 @@ class UPerNet(nn.Module):
         fpn_feature_list = [f]
         for i in reversed(range(len(conv_out) - 1)):
             conv_x = conv_out[i]
-            conv_x = self.fpn_in[i](conv_x) # lateral branch
+            conv_x = self.fpn_in[i](conv_x)  # lateral branch
 
             f = nn.functional.interpolate(
-                f, size=conv_x.size()[2:], mode='bilinear', align_corners=False) # top-down branch
+                f, size=conv_x.size()[2:], mode='bilinear', align_corners=False)  # top-down branch
             f = conv_x + f
 
             fpn_feature_list.append(self.fpn_out[i](f))
 
-        fpn_feature_list.reverse() # [P2 - P5]
+        fpn_feature_list.reverse()  # [P2 - P5]
         output_size = fpn_feature_list[0].size()[2:]
         fusion_list = [fpn_feature_list[0]]
         for i in range(1, len(fpn_feature_list)):
