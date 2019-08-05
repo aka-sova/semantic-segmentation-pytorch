@@ -7,52 +7,34 @@ import numpy as np
 import torch
 import torch.nn as nn
 from scipy.io import loadmat
-import csv
 # Our libs
 from dataset import TestDataset
 from models import ModelBuilder, SegmentationModule
-from utils import colorEncode, find_recursive, setup_logger
+from utils import colorEncode, find_recursive
 from lib.nn import user_scattered_collate, async_copy_to
 from lib.utils import as_numpy
-from PIL import Image
+import lib.utils.data as torchdata
+import cv2
 from tqdm import tqdm
-from config import cfg
 
 colors = loadmat('data/color150.mat')['colors']
-names = {}
-with open('data/object150_info.csv') as f:
-    reader = csv.reader(f)
-    next(reader)
-    for row in reader:
-        names[int(row[0])] = row[5].split(";")[0]
 
 
-def visualize_result(data, pred, cfg):
+def visualize_result(data, pred, args):
     (img, info) = data
 
-    # print predictions in descending order
-    pred = np.int32(pred)
-    pixs = pred.size
-    uniques, counts = np.unique(pred, return_counts=True)
-    print("Predictions in [{}]:".format(info))
-    for idx in np.argsort(counts)[::-1]:
-        name = names[uniques[idx] + 1]
-        ratio = counts[idx] / pixs * 100
-        if ratio > 0.1:
-            print("  {}: {:.2f}%".format(name, ratio))
-
-    # colorize prediction
+    # prediction
     pred_color = colorEncode(pred, colors).astype(np.uint8)
 
     # aggregate images and save
     im_vis = np.concatenate((img, pred_color), axis=1)
 
     img_name = info.split('/')[-1]
-    Image.fromarray(im_vis).save(
-        os.path.join(cfg.TEST.result, img_name.replace('.jpg', '.png')))
+    cv2.imwrite(os.path.join(args.result,
+                img_name.replace('.jpg', '.png')), im_vis)
 
 
-def test(segmentation_module, loader, gpu):
+def test(segmentation_module, loader, args):
     segmentation_module.eval()
 
     pbar = tqdm(total=len(loader))
@@ -64,19 +46,19 @@ def test(segmentation_module, loader, gpu):
         img_resized_list = batch_data['img_data']
 
         with torch.no_grad():
-            scores = torch.zeros(1, cfg.DATASET.num_class, segSize[0], segSize[1])
-            scores = async_copy_to(scores, gpu)
+            scores = torch.zeros(1, args.num_class, segSize[0], segSize[1])
+            scores = async_copy_to(scores, args.gpu)
 
             for img in img_resized_list:
                 feed_dict = batch_data.copy()
                 feed_dict['img_data'] = img
                 del feed_dict['img_ori']
                 del feed_dict['info']
-                feed_dict = async_copy_to(feed_dict, gpu)
+                feed_dict = async_copy_to(feed_dict, args.gpu)
 
                 # forward pass
                 pred_tmp = segmentation_module(feed_dict, segSize=segSize)
-                scores = scores + pred_tmp / len(cfg.DATASET.imgSizes)
+                scores = scores + pred_tmp / len(args.imgSize)
 
             _, pred = torch.max(scores, dim=1)
             pred = as_numpy(pred.squeeze(0).cpu())
@@ -84,26 +66,25 @@ def test(segmentation_module, loader, gpu):
         # visualization
         visualize_result(
             (batch_data['img_ori'], batch_data['info']),
-            pred,
-            cfg
-        )
+            pred, args)
 
         pbar.update(1)
 
 
-def main(cfg, gpu):
-    torch.cuda.set_device(gpu)
+def main(args):
+    torch.cuda.set_device(args.gpu)
 
     # Network Builders
-    net_encoder = ModelBuilder.build_encoder(
-        arch=cfg.MODEL.arch_encoder,
-        fc_dim=cfg.MODEL.fc_dim,
-        weights=cfg.MODEL.weights_encoder)
-    net_decoder = ModelBuilder.build_decoder(
-        arch=cfg.MODEL.arch_decoder,
-        fc_dim=cfg.MODEL.fc_dim,
-        num_class=cfg.DATASET.num_class,
-        weights=cfg.MODEL.weights_decoder,
+    builder = ModelBuilder()
+    net_encoder = builder.build_encoder(
+        arch=args.arch_encoder,
+        fc_dim=args.fc_dim,
+        weights=args.weights_encoder)
+    net_decoder = builder.build_decoder(
+        arch=args.arch_decoder,
+        fc_dim=args.fc_dim,
+        num_class=args.num_class,
+        weights=args.weights_decoder,
         use_softmax=True)
 
     crit = nn.NLLLoss(ignore_index=-1)
@@ -111,12 +92,16 @@ def main(cfg, gpu):
     segmentation_module = SegmentationModule(net_encoder, net_decoder, crit)
 
     # Dataset and Loader
+    if len(args.test_imgs) == 1 and os.path.isdir(args.test_imgs[0]):
+        test_imgs = find_recursive(args.test_imgs[0])
+    else:
+        test_imgs = args.test_imgs
+    list_test = [{'fpath_img': x} for x in test_imgs]
     dataset_test = TestDataset(
-        cfg.list_test,
-        cfg.DATASET)
-    loader_test = torch.utils.data.DataLoader(
+        list_test, args, max_sample=args.num_val)
+    loader_test = torchdata.DataLoader(
         dataset_test,
-        batch_size=cfg.TEST.batch_size,
+        batch_size=args.batch_size,
         shuffle=False,
         collate_fn=user_scattered_collate,
         num_workers=5,
@@ -125,7 +110,7 @@ def main(cfg, gpu):
     segmentation_module.cuda()
 
     # Main loop
-    test(segmentation_module, loader_test, gpu)
+    test(segmentation_module, loader_test, args)
 
     print('Inference done!')
 
@@ -134,65 +119,64 @@ if __name__ == '__main__':
     assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
         'PyTorch>=0.4.0 is required'
 
-    parser = argparse.ArgumentParser(
-        description="PyTorch Semantic Segmentation Testing"
-    )
-    parser.add_argument(
-        "--imgs",
-        required=True,
-        type=str,
-        help="an image paths, or a directory name"
-    )
-    parser.add_argument(
-        "--cfg",
-        default="config/ade20k-resnet50dilated-ppm_deepsup.yaml",
-        metavar="FILE",
-        help="path to config file",
-        type=str,
-    )
-    parser.add_argument(
-        "--gpu",
-        default=0,
-        type=int,
-        help="gpu id for evaluation"
-    )
-    parser.add_argument(
-        "opts",
-        help="Modify config options using the command-line",
-        default=None,
-        nargs=argparse.REMAINDER,
-    )
+    parser = argparse.ArgumentParser()
+    # Path related arguments
+    parser.add_argument('--test_imgs', required=True, nargs='+', type=str,
+                        help='a list of image paths, or a directory name')
+    parser.add_argument('--model_path', required=True,
+                        help='folder to model path')
+    parser.add_argument('--suffix', default='_epoch_20.pth',
+                        help="which snapshot to load")
+
+    # Model related arguments
+    parser.add_argument('--arch_encoder', default='resnet50dilated',
+                        help="architecture of net_encoder")
+    parser.add_argument('--arch_decoder', default='ppm_deepsup',
+                        help="architecture of net_decoder")
+    parser.add_argument('--fc_dim', default=2048, type=int,
+                        help='number of features between encoder and decoder')
+
+    # Data related arguments
+    parser.add_argument('--num_val', default=-1, type=int,
+                        help='number of images to evalutate')
+    parser.add_argument('--num_class', default=150, type=int,
+                        help='number of classes')
+    parser.add_argument('--batch_size', default=1, type=int,
+                        help='batchsize. current only supports 1')
+    parser.add_argument('--imgSize', default=[300, 400, 500, 600],
+                        nargs='+', type=int,
+                        help='list of input image sizes.'
+                             'for multiscale testing, e.g. 300 400 500')
+    parser.add_argument('--imgMaxSize', default=1000, type=int,
+                        help='maximum input image size of long edge')
+    parser.add_argument('--padding_constant', default=8, type=int,
+                        help='maxmimum downsampling rate of the network')
+    parser.add_argument('--segm_downsampling_rate', default=8, type=int,
+                        help='downsampling rate of the segmentation label')
+
+    # Misc arguments
+    parser.add_argument('--result', default='.',
+                        help='folder to output visualization results')
+    parser.add_argument('--gpu', default=0, type=int,
+                        help='gpu id for evaluation')
+
     args = parser.parse_args()
-
-    cfg.merge_from_file(args.cfg)
-    cfg.merge_from_list(args.opts)
-    # cfg.freeze()
-
-    logger = setup_logger(distributed_rank=0)   # TODO
-    logger.info("Loaded configuration file {}".format(args.cfg))
-    logger.info("Running with config:\n{}".format(cfg))
-
-    cfg.MODEL.arch_encoder = cfg.MODEL.arch_encoder.lower()
-    cfg.MODEL.arch_decoder = cfg.MODEL.arch_decoder.lower()
+    args.arch_encoder = args.arch_encoder.lower()
+    args.arch_decoder = args.arch_decoder.lower()
+    print("Input arguments:")
+    for key, val in vars(args).items():
+        print("{:16} {}".format(key, val))
 
     # absolute paths of model weights
-    cfg.MODEL.weights_encoder = os.path.join(
-        cfg.DIR, 'encoder_' + cfg.TEST.checkpoint)
-    cfg.MODEL.weights_decoder = os.path.join(
-        cfg.DIR, 'decoder_' + cfg.TEST.checkpoint)
+    args.weights_encoder = os.path.join(args.model_path,
+                                        'encoder' + args.suffix)
+    args.weights_decoder = os.path.join(args.model_path,
+                                        'decoder' + args.suffix)
 
-    assert os.path.exists(cfg.MODEL.weights_encoder) and \
-        os.path.exists(cfg.MODEL.weights_decoder), "checkpoint does not exitst!"
+    assert os.path.exists(args.weights_encoder) and \
+        os.path.exists(args.weights_encoder), 'checkpoint does not exitst!'
 
-    # generate testing image list
-    if os.path.isdir(args.imgs[0]):
-        imgs = find_recursive(args.imgs[0])
-    else:
-        imgs = [args.imgs]
-    assert len(imgs), "imgs should be a path to image (.jpg) or directory."
-    cfg.list_test = [{'fpath_img': x} for x in imgs]
+    if not os.path.isdir(args.result):
+        os.makedirs(args.result)
 
-    if not os.path.isdir(cfg.TEST.result):
-        os.makedirs(cfg.TEST.result)
-
-    main(cfg, args.gpu)
+    main(args)
