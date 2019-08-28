@@ -2,7 +2,7 @@ The project goal is to classify open spaces (like doorways and windows).
 The network is based on MIT CSAIL Computer Vision department.
 
 The trained network and our new labeled data can be found at: 
-https://drive.google.com/open?id=1ggGyOeqabowe007_vkKk4FRWMtvei0Mv. 
+https://drive.google.com/open?id=1MsoTBIhLiqpx2XsrDLvFPf_uM5H0tPhV. 
 
 # Semantic Segmentation on MIT ADE20K dataset in PyTorch
 
