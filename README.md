@@ -1,3 +1,9 @@
+The project goal is to classify open spaces (like doorways and windows).
+The network is based on MIT CSAIL Computer Vision department.
+
+The trained network and our new labeled data can be found at: 
+https://drive.google.com/open?id=1ggGyOeqabowe007_vkKk4FRWMtvei0Mv. 
+
 # Semantic Segmentation on MIT ADE20K dataset in PyTorch
 
 This is a PyTorch implementation of semantic segmentation models on MIT ADE20K scene parsing dataset.
