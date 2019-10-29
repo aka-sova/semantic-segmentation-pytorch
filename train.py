@@ -15,6 +15,10 @@ from utils import AverageMeter, parse_devices
 from lib.nn import UserScatteredDataParallel, user_scattered_collate, patch_replication_callback
 import lib.utils.data as torchdata
 
+# for the CUDA debug
+import os
+os.environ['CUDA_LAUNCH_BLOCKING'] = "1"
+
 
 # train one epoch
 def train(segmentation_module, iterator, optimizers, history, epoch, args):
@@ -236,14 +240,14 @@ if __name__ == '__main__':
 
     # Path related arguments
     parser.add_argument('--list_train',
-                        default='./data/training.odgt')
+                        default='./data/train_dataset_new.odgt')
     parser.add_argument('--list_val',
-                        default='./data/validation.odgt')
+                        default='./data/test_dataset_new.odgt')
     parser.add_argument('--root_dataset',
-                        default='./data/')
+                        default='/')
 
     # optimization related arguments
-    parser.add_argument('--gpus', default='0-3',
+    parser.add_argument('--gpus', default='0',
                         help='gpus to use, e.g. 0-3 or 0,1,2,3')
     parser.add_argument('--batch_size_per_gpu', default=2, type=int,
                         help='input batch size')
@@ -268,7 +272,7 @@ if __name__ == '__main__':
                         help='fix bn params')
 
     # Data related arguments
-    parser.add_argument('--num_class', default=150, type=int,
+    parser.add_argument('--num_class', default=5, type=int,
                         help='number of classes')
     parser.add_argument('--workers', default=16, type=int,
                         help='number of data loading workers')

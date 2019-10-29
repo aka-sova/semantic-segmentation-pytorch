@@ -139,6 +139,12 @@ class TrainDataset(BaseDataset):
             img = cv2.imread(image_path, cv2.IMREAD_COLOR)
             segm = cv2.imread(segm_path, cv2.IMREAD_GRAYSCALE)
 
+            if img is None:
+                print("NONE DETECTED AT ", image_path)
+
+            print("Path is ", image_path)
+            print(img.shape)
+
             assert(img.ndim == 3)
             assert(segm.ndim == 2)
             assert(img.shape[0] == segm.shape[0])
