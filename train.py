@@ -165,9 +165,16 @@ def main(args):
         weights=args.weights_decoder,
         fine_tuned=args.fine_tuned)
 
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
+    net_decoder.to(device)
+    net_encoder.to(device)
+
     loss_scale = args.loss_weight
-    loss_weights = torch.tensor([1.0, 1.0, 1.0, 1.0, 1.0 * loss_scale])
+    loss_weights = torch.ones(args.num_class)*loss_scale
     crit = nn.NLLLoss(ignore_index=-1, weight=loss_weights)
+    #crit = nn.CrossEntropyLoss(ignore_index=-1, weight=loss_weights)
+
 
     if args.arch_decoder.endswith('deepsup'):
         segmentation_module = SegmentationModule(
@@ -220,10 +227,17 @@ def main(args):
 
 
 if __name__ == '__main__':
+
+    CUDA_LAUNCH_BLOCKING = "1"
+
+
     assert LooseVersion(torch.__version__) >= LooseVersion('0.4.0'), \
         'PyTorch>=0.4.0 is required'
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', default='client')
+    parser.add_argument('--port', default='36781')
+
     # Model related arguments
     parser.add_argument('--id', default='baseline',
                         help="a name for identifying the model")
@@ -274,7 +288,7 @@ if __name__ == '__main__':
     # Data related arguments
     parser.add_argument('--num_class', default=5, type=int,
                         help='number of classes')
-    parser.add_argument('--workers', default=16, type=int,
+    parser.add_argument('--workers', default=0, type=int,
                         help='number of data loading workers')
     parser.add_argument('--imgSize', default=[300, 375, 450, 525, 600],
                         nargs='+', type=int,
@@ -296,10 +310,15 @@ if __name__ == '__main__':
                         help='frequency to display')
     parser.add_argument('--loss_weight', type=float, default=1.0,
                         help='We added this')
-    parser.add_argument('--fine_tuned', default=False, type=bool,
+    parser.add_argument('--fine_tuned', default=True, type=bool,
                         help='Whether to fine tune the last FC layer')
 
     args = parser.parse_args()
+
+    # absolute paths of model weights
+    args.weights_encoder = os.path.join('./pretrained/encoder_epoch_20.pth')
+    args.weights_decoder = os.path.join('./pretrained/decoder_epoch_20.pth')
+
     print("Input arguments:")
     for key, val in vars(args).items():
         print("{:16} {}".format(key, val))
