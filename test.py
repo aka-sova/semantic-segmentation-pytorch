@@ -93,7 +93,7 @@ def main(args):
 
     # Dataset and Loader
     if len(args.test_imgs) == 1 and os.path.isdir(args.test_imgs[0]):
-        test_imgs = find_recursive(args.test_imgs[0])
+        test_imgs = find_recursive(args.test_imgs[0], ext='png')
     else:
         test_imgs = args.test_imgs
     list_test = [{'fpath_img': x} for x in test_imgs]
@@ -120,12 +120,16 @@ if __name__ == '__main__':
         'PyTorch>=0.4.0 is required'
 
     parser = argparse.ArgumentParser()
+    parser.add_argument('--mode', default='client')
+    parser.add_argument('--port', default='36781')
     # Path related arguments
-    parser.add_argument('--test_imgs', required=True, nargs='+', type=str,
+    parser.add_argument('--test_imgs', required=False, nargs='+', type=str,
+                        default='[TEST/input_images]',
                         help='a list of image paths, or a directory name')
-    parser.add_argument('--model_path', required=True,
+    parser.add_argument('--model_path', required=False,
+                        default='TEST/trained_networks',
                         help='folder to model path')
-    parser.add_argument('--suffix', default='_epoch_20.pth',
+    parser.add_argument('--suffix', default='_epoch_5.pth',
                         help="which snapshot to load")
 
     # Model related arguments
@@ -139,7 +143,7 @@ if __name__ == '__main__':
     # Data related arguments
     parser.add_argument('--num_val', default=-1, type=int,
                         help='number of images to evalutate')
-    parser.add_argument('--num_class', default=150, type=int,
+    parser.add_argument('--num_class', default=5, type=int,
                         help='number of classes')
     parser.add_argument('--batch_size', default=1, type=int,
                         help='batchsize. current only supports 1')
@@ -155,7 +159,7 @@ if __name__ == '__main__':
                         help='downsampling rate of the segmentation label')
 
     # Misc arguments
-    parser.add_argument('--result', default='.',
+    parser.add_argument('--result', default='TEST/output_images',
                         help='folder to output visualization results')
     parser.add_argument('--gpu', default=0, type=int,
                         help='gpu id for evaluation')
