@@ -38,7 +38,7 @@ One of the way to extract the location from the door from this image is using th
 
     Implementation: 
     - the color of those segments is known apriori. Image analisys will be in the LAB color space, in order to decrease the lightness influence on the result.
-    - Lines extraction : 
+    - Lines extraction (methods) : 
         - use RANSAC to find the lines in the image
         - Use the Hough transform
 
@@ -49,13 +49,32 @@ The following is the example of using the filter on the specific HSV parameters.
 
 <img src="./imgs/filteted_result.png" width="400"/>
 
+[the Mask image]
+
 Later, we can use the RANSAC method in order to extract the line segments in the image, and use the Maximum suppression in order to leave only the most-outer lines. 
 We have to receive at most 3 lines! The line on the bottom will be closing the parallelogram. 
 
 We can later use the Harris Corner Detector to verify that the 4 edge-points of the door are indeed 'corners' (they should be detected by the Harris Corner Detector!). If they are, we can describe those corners as 'Features' (SIFT) and track those between the images. 
 
 
+#### Using the RANSAC
+
 Below is the example the image with the RANSAC algorithm detecting a single line. (Using the _sklearn_ library)
 
  <img src="./imgs/RANSAC_example.png" width="400"/>
+
+
+#### Using the Hough Transform
+
+Another method is using the Hough transform. 
+
+By taking the raw image, transforming into grayscale, using the Canny Edge Detector, and using the Hough transform, we obtain the result in Image on the left.
+
+By taking the Mask image, and applying the Hough transform on it, we obtain the Image on the right.
+
+ <img src="./imgs/Houghlines_on_original_image.jpg" width="300"/>
+
+  <img src="./imgs/Houghlines_on_masked_image.jpg" width="300"/>
+
+
 
