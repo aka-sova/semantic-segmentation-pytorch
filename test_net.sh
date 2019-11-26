@@ -1,7 +1,6 @@
 #!/bin/bash
 
 # Image and model names
-TEST_IMG=ADE_val_00001519.jpg
 MODEL_PATH=TEST/trained_networks
 
 INPUT_PATH=TEST/input_images
@@ -15,4 +14,5 @@ python -u test.py \
   --arch_decoder ppm_deepsup \
   --fc_dim 2048 \
   --result $OUTPUT_PATH \
-  --num_class 5
+  --num_class 5 \
+  --suffix _epoch_20.pth

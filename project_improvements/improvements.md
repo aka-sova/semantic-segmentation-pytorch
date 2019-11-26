@@ -32,11 +32,15 @@ Below is the example:
 
 One of the way to extract the location from the door from this image is using the traditional methods. Although, also here different techniques may be used:
 
-1. Template matching - find the colorful lines of the same color, elongate until they meet. Color the shape inside. Analyze the shape, if this shape is a parallelogram, then the prediction is correct
+1. Find the colorful small lines of the required color. Use some method to estimate the door lines. Color the shape inside. Analyze the shape, if this shape is a parallelogram, then the prediction is correct
 
     Possible improvement - use the tracking algorithm to track the shapes in the corners. 
 
-    Implementation: the color of those segments is known apriori. Image analisys will be in the LAB color space, in order to decrease the lightness influence on the result.
+    Implementation: 
+    - the color of those segments is known apriori. Image analisys will be in the LAB color space, in order to decrease the lightness influence on the result.
+    - Lines extraction : 
+        - use RANSAC to find the lines in the image
+        - Use the Hough transform
 
 
 ### Preliminary results

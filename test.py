@@ -93,7 +93,7 @@ def main(args):
 
     # Dataset and Loader
     if len(args.test_imgs) == 1 and os.path.isdir(args.test_imgs[0]):
-        test_imgs = find_recursive(args.test_imgs[0], ext='png')
+        test_imgs = find_recursive(args.test_imgs[0], ext=['.png', '.jpg'])
     else:
         test_imgs = args.test_imgs
     list_test = [{'fpath_img': x} for x in test_imgs]

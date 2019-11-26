@@ -5,11 +5,13 @@ import fnmatch
 import numpy as np
 
 
-def find_recursive(root_dir, ext='.jpg'):
+def find_recursive(root_dir, ext=['.jpg']):
     files = []
     for root, dirnames, filenames in os.walk(root_dir):
-        for filename in fnmatch.filter(filenames, '*' + ext):
-            files.append(os.path.join(root, filename))
+        for extension in ext:
+            for filename in fnmatch.filter(filenames, '*' + extension):
+                files.append(os.path.join(root, filename))
+
     return files
 
 
