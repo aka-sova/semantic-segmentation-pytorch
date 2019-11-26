@@ -45,3 +45,13 @@ The following is the example of using the filter on the specific HSV parameters.
 
 <img src="./imgs/filteted_result.png" width="400"/>
 
+Later, we can use the RANSAC method in order to extract the line segments in the image, and use the Maximum suppression in order to leave only the most-outer lines. 
+We have to receive at most 3 lines! The line on the bottom will be closing the parallelogram. 
+
+We can later use the Harris Corner Detector to verify that the 4 edge-points of the door are indeed 'corners' (they should be detected by the Harris Corner Detector!). If they are, we can describe those corners as 'Features' (SIFT) and track those between the images. 
+
+
+Below is the example the image with the RANSAC algorithm detecting a single line. (Using the _sklearn_ library)
+
+ <img src="./imgs/RANSAC_example.png" width="400"/>
+
