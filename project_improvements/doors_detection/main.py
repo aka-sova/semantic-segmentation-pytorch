@@ -8,6 +8,7 @@ import os
 from sklearn import linear_model, datasets
 
 
+
 cur_cwd = os.getcwd()
 os.chdir(os.path.abspath(os.path.join(cur_cwd, 'project_improvements', 'doors_detection')))
 
@@ -75,7 +76,7 @@ plt.savefig('RANSAC_example.png')
 # Using the Hough transform algorithm to find the lines
 
 # first demonstrate on original image
-original_img = img_cv
+original_img = img_cv = cv2.resize(cv2.imread('door_raw.jpg'), None, fx=0.2, fy=0.2)
 gray = cv2.cvtColor(original_img,cv2.COLOR_BGR2GRAY)
 edges = cv2.Canny(gray,50,150,apertureSize = 3)
 
@@ -101,15 +102,16 @@ cv2.imwrite('Houghlines_on_original_image.jpg', original_img)
 
 # now use on the image with the mask
 mask_img_2 = mask_img
-original_img = img_cv
-cv2.imshow('Mask image', mask_img_2)
+edges_mask = cv2.Canny(mask_img_2,50,150,apertureSize = 3)
+original_img = img_cv = cv2.resize(cv2.imread('door_raw.jpg'), None, fx=0.2, fy=0.2)
+# cv2.imshow('Mask image', mask_img_2)
 
 mask_img_2_colored = np.expand_dims(mask_img_2, 0)
 mask_img_2_colored = np.concatenate((mask_img_2_colored, mask_img_2_colored, mask_img_2_colored), 0)
 mask_img_2_colored = np.moveaxis(mask_img_2_colored, 0, -1)
 
 
-lines_2 = cv2.HoughLines(mask_img_2, rho=1, theta=np.pi/180, threshold=50)
+lines_2 = cv2.HoughLines(edges_mask, rho=1, theta=np.pi/180, threshold=30)
 for line_num in range(lines_2.shape[0]):
     rho = lines_2[line_num][0][0]
     theta = lines_2[line_num][0][1]
@@ -129,10 +131,9 @@ cv2.imwrite('Houghlines_on_masked_image.jpg', original_img)
 
 
 # Unite both of the masks together to see if we get improvement
-new_mask = cv2.bitwise_and(edges, edges, mask = mask_img_2)
+#   new_mask = cv2.bitwise_and(edges, edges, mask = mask_img_2)
 
-# Trying to expand the mask with the stickers to see if we get better results
-cv2.imshow('The united mask', new_mask)
+
 
 
 

@@ -72,9 +72,11 @@ By taking the raw image, transforming into grayscale, using the Canny Edge Detec
 
 By taking the Mask image, and applying the Hough transform on it, we obtain the Image on the right.
 
- <img src="./imgs/Houghlines_on_original_image.jpg" width="300"/>
+<img src="./imgs/Houghlines_on_original_image.jpg" width="300"/>
 
-  <img src="./imgs/Houghlines_on_masked_image.jpg" width="300"/>
+<img src="./imgs/Houghlines_on_masked_image.jpg" width="300"/>
 
+As we can see, the Hough lines found from the original image are more consistent, and more correct. But they also include the 
 
+A further idea is to filter the lines found from the 
 
