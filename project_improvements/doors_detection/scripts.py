@@ -5,7 +5,7 @@ import matplotlib.image as mpimg
 import os
 from sklearn import linear_model, datasets
 from collections import defaultdict
-
+import shutil
 
 def rgb_2_hsv_pixel(rgb: list):
     pixel = np.zeros((1, 1, 3))
@@ -133,19 +133,43 @@ def non_max_suppression_lines(lines: np.ndarray, threshold_rho: int, threshold_t
         for line_num in range(lines.shape[0]):
             rho = lines[line_num][0][0]
             theta = lines[line_num][0][1]
-            theta = np.arctan2(np.sin(theta), np.cos(theta))  # normalize
             met_suppressed_line = False  # is not, create new line
+
+            x0 = rho * np.cos(theta)
+            y0 = rho * np.sin(theta)
+
+            line_param = np.array([x0, y0])
 
             for suppressed_line in suppressed_lines:
                 rho_supp = suppressed_line[0]
                 theta_supp = suppressed_line[1]
 
-                if np.abs(rho - rho_supp) <= threshold_rho and np.abs(theta - theta_supp) <= threshold_theta:
-                    suppressed_line[0] = (rho_supp + rho)/2  # mean
+                x0_supp = rho_supp * np.cos(theta_supp)
+                y0_supp = rho_supp * np.sin(theta_supp)
+
+                supprassed_params = np.array([x0_supp, y0_supp])
+
+                diff = np.abs(theta - theta_supp)
+                angle_diff = np.min([diff, np.pi - diff])  # use pi instead of pi*2 since lines looking opposite are same
+
+
+                distance = np.linalg.norm(line_param - supprassed_params)
+
+                if distance <= threshold_rho and angle_diff <= threshold_theta:
+
+                    if rho < 0:
+                        rho = np.abs(rho)
+                        theta = theta - np.pi  # will yield same line
+
+                    suppressed_line[0] = (rho_supp + rho) / 2  # mean
                     suppressed_line[1] = (theta_supp + theta) / 2  # mean
                     met_suppressed_line = True
 
             if not met_suppressed_line:
+                # bring all lines to one policy - no negative rho!
+                if rho < 0:
+                    rho = np.abs(rho)
+                    theta = theta - np.pi # will yield same line
                 suppressed_lines.append([rho, theta])
 
     if len(suppressed_lines) > 0:
@@ -260,7 +284,10 @@ def draw_polygons(intersection_points: list, original_img):
 def get_segmentation(input_img_loc: str, debug: bool=True, debug_folder: str="output_debug"):
     """This process receives an image, and outputs its segmentation"""
     if debug:
-        if not os.path.exists(debug_folder):
+        if os.path.exists(debug_folder):
+            shutil.rmtree(debug_folder, ignore_errors=True)
+            os.mkdir(debug_folder)
+        else:
             os.mkdir(debug_folder)
 
     # Main parameters of the process
@@ -271,26 +298,31 @@ def get_segmentation(input_img_loc: str, debug: bool=True, debug_folder: str="ou
     V_margin = [120, 100]
 
     # 2. Morphological 'open' operation
-    kernel = np.ones((3, 3), np.uint8)
+    kernel = np.ones((2, 2), np.uint8)
 
-    # 3. Canny edge detector
-    canny_threshold_1 = 50
-    canny_threshold_2 = 150
-    canny_aperture_size = 3
+    # 3. Canny edge detector - normal image
+    canny_threshold_normal_1 = 80
+    canny_threshold_normal_2 = 120
+    canny_aperture_size_normal = 3
+
+    # 3. Canny edge detector - mask image
+    canny_threshold_mask_1 = 60
+    canny_threshold_mask_2 = 120
+    canny_aperture_size_mask = 3
 
     # 4. Hough on original edges
-    hough_threshold_normal = 100
+    hough_threshold_normal = 80
 
     # 5. Hough on masked image edges
-    hough_threshold_masked = 20
+    hough_threshold_masked = 25
 
     # 6. threshold to find common lines
-    threshold_rho_common = 3
+    threshold_rho_common = 5
     threshold_theta_common = 0.2
 
     # 7. threshold for non max suppression
-    threshold_rho_max_sup = 20
-    threshold_theta_max_sup = 0.5
+    threshold_rho_max_sup = 45
+    threshold_theta_max_sup = 1
 
     img_cv = cv2.imread(input_img_loc)
     img_mp = mpimg.imread(input_img_loc)
@@ -340,7 +372,7 @@ def get_segmentation(input_img_loc: str, debug: bool=True, debug_folder: str="ou
     # first demonstrate on original image
     original_img = np.copy(img_cv)
     gray = cv2.cvtColor(original_img, cv2.COLOR_BGR2GRAY)
-    edges = cv2.Canny(gray, threshold1=canny_threshold_1, threshold2=canny_threshold_2, apertureSize=canny_aperture_size)
+    edges = cv2.Canny(gray, threshold1=canny_threshold_normal_1, threshold2=canny_threshold_normal_2, apertureSize=canny_aperture_size_normal)
 
     if debug:
         cv2.imwrite(os.path.join(debug_folder, '4_Edges_original_image.jpg'), edges)
@@ -353,7 +385,7 @@ def get_segmentation(input_img_loc: str, debug: bool=True, debug_folder: str="ou
 
     # now use on the image with the mask
     mask_img_copy = np.copy(mask_img)
-    edges_mask = cv2.Canny(mask_img_copy, threshold1=canny_threshold_1, threshold2=canny_threshold_2, apertureSize=canny_aperture_size)
+    edges_mask = cv2.Canny(mask_img_copy, threshold1=canny_threshold_mask_1, threshold2=canny_threshold_mask_2, apertureSize=canny_aperture_size_mask)
 
     if debug:
         cv2.imwrite(os.path.join(debug_folder, '6_Edges_of_the_mask_image.jpg'), edges_mask)
@@ -376,7 +408,7 @@ def get_segmentation(input_img_loc: str, debug: bool=True, debug_folder: str="ou
     # get the lines which are similar between the ones extracted from the normal image
     # and the masked image
 
-    common_lines = get_common_lines(lines_on_normal_image, lines_on_masked_img, threshold_rho=threshold_rho_common, threshold_theta=threshold_theta_common)
+    common_lines = get_common_lines(lines_on_masked_img, lines_on_normal_image, threshold_rho=threshold_rho_common, threshold_theta=threshold_theta_common)
 
     # draw those lines on the original image
     filtered_lines_image = np.copy(original_img)
