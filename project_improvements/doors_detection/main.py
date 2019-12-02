@@ -20,6 +20,7 @@ cur_cwd = os.getcwd()
 input_folder = os.path.join(os.path.join(cur_cwd, 'input'))
 output_folder = os.path.join(os.path.join(cur_cwd, 'output'))
 final_folder = os.path.join(os.path.join(output_folder, 'final'))
+debug_folder = os.path.join(os.path.join(output_folder, 'debug'))
 
 if not os.path.exists(output_folder):
     os.mkdir(output_folder)
@@ -27,13 +28,15 @@ if not os.path.exists(output_folder):
 if not os.path.exists(final_folder):
     os.mkdir(final_folder)
 
+if not os.path.exists(debug_folder):
+    os.mkdir(debug_folder)
 
 input_imgs = find_recursive(input_folder, ext=['.png', '.jpg'])
 
 for input_img in input_imgs:
     print("Inferring for " + input_img)
     img_name = os.path.basename(input_img)[:-4] # remove the extension
-    debug_folder = os.path.join(os.path.join(output_folder, img_name))
+    debug_folder = os.path.join(os.path.join(output_folder, 'debug', img_name))
     segmented_img = get_segmentation(input_img, debug=True, debug_folder=debug_folder)
     if segmented_img is not None:
         cv2.imwrite(os.path.join(final_folder, img_name + '.jpg'), segmented_img)

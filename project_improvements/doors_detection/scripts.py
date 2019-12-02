@@ -436,6 +436,10 @@ def get_segmentation(input_img_loc: str, debug: bool=True, debug_folder: str="ou
     # To continue, we NEED to have EXACTLY 4 lines.
 
     # Find 4 intersection points
+    if non_max_common_lines is None:
+        return None
+
+
     (intersection_points, segmented_lines, intersections_image) = find_intersections(non_max_common_lines, original_img)
 
     if debug:
