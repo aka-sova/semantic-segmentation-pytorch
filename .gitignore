@@ -4,3 +4,4 @@ ckpt/
 vis/
 log/
 pretrained/
+project_improvements/doors_detection/output/debug/**

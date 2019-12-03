@@ -42,41 +42,71 @@ One of the way to extract the location from the door from this image is using th
         - use RANSAC to find the lines in the image
         - Use the Hough transform
 
-
-### Preliminary results
-
-The following is the example of using the filter on the specific HSV parameters. Certain margin values have been tried, until this result was obtained:
-
-<img src="./imgs/filteted_result.png" width="400"/>
-
-[the Mask image]
-
-Later, we can use the RANSAC method in order to extract the line segments in the image, and use the Maximum suppression in order to leave only the most-outer lines. 
-We have to receive at most 3 lines! The line on the bottom will be closing the parallelogram. 
+## Ideas 
 
 We can later use the Harris Corner Detector to verify that the 4 edge-points of the door are indeed 'corners' (they should be detected by the Harris Corner Detector!). If they are, we can describe those corners as 'Features' (SIFT) and track those between the images. 
 
-
 #### Using the RANSAC
 
-Below is the example the image with the RANSAC algorithm detecting a single line. (Using the _sklearn_ library)
+Below is the example the image with the RANSAC algorithm detecting a single line. But this method will not be used. (Using the _sklearn_ library)
 
  <img src="./imgs/RANSAC_example.png" width="400"/>
 
 
-#### Using the Hough Transform
+## Results
 
-Another method is using the Hough transform. 
+The following is the description of the process which currently works and identifies doorways.
 
-By taking the raw image, transforming into grayscale, using the Canny Edge Detector, and using the Hough transform, we obtain the result in Image on the left.
 
-By taking the Mask image, and applying the Hough transform on it, we obtain the Image on the right.
+### 1. The input image
 
-<img src="./imgs/Houghlines_on_original_image.jpg" width="300"/>
+<img src="./imgs//example/1_input_img.jpg" width="200"/>
 
-<img src="./imgs/Houghlines_on_masked_image.jpg" width="300"/>
 
-As we can see, the Hough lines found from the original image are more consistent, and more correct. But they also include the 
+### 2-3. Extract the Mask, clean it
 
-A further idea is to filter the lines found from the 
+Extract the mask of the colorful markers using the HSV color spectrum. \
+Then use Morphological Open operator to clean the noise
 
+<img src="./imgs//example/2_mask_before_morph.jpg" width="300"/>
+<img src="./imgs//example/3_mask_after_morph.jpg" width="300"/>
+
+### 4-5. Find Edges on original image, draw Hough Lines
+
+Use the Canny Edge detector
+
+<img src="./imgs//example/4_Edges_original_image.jpg" width="300"/>
+<img src="./imgs//example/5_Houghlines_on_original_image.jpg" width="300"/>
+
+### 6-7. Find Edges on mask image, draw Hough Lines
+
+<img src="./imgs//example/6_Edges_of_the_mask_image.jpg" width="300"/>
+<img src="./imgs//example/7_Houghlines_on_original_image_from_mask.jpg" width="300"/>
+
+### 8-9 Filter Hough Lines from mask with Hough Lines from normal image. Use non-max suppression to unite similar lines
+
+<img src="./imgs//example/8_Merged_lines_on_original_image.jpg" width="300"/>
+<img src="./imgs//example/9_Suppressed_lines_on_original_image.jpg" width="300"/>
+
+### 10-11 We expect to receive 4 lines. Find intersections, draw the polygon inside
+
+<img src="./imgs//example/10_Intersections_image.jpg" width="300"/>
+<img src="./imgs//example/11_Polygon.jpg" width="300"/>
+
+
+
+## Discussion:
+
+We can see that in this specific presented example we have obtained a good doorway recognition. By using numerous images, I have reached 50% success in recognizing the doorway. 
+
+The following constraints apply to this algorithm:
+
+1. Only 1 'bordered' object may be present in the scene
+2. All 4 markers must be fully visible
+3. The object has to have visible edges which will be detected using normal Hough transform
+
+The following can be done to improve performance:
+
+1. Use longer markers
+2. Use color which is rare in the scene
+3. Tune the algorithm parameters
